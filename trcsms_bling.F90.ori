@@ -1,0 +1,274 @@
+MODULE trcsms_bling
+
+#if defined key_bling
+   !!----------------------------------------------------------------------
+   !!   'key_bling'                                               CFC tracers
+   !!----------------------------------------------------------------------
+   !! trc_sms_bling       : BLINGv0 model main routine
+   !!----------------------------------------------------------------------
+   USE par_trc         ! TOP parameters
+   USE oce_trc         ! Ocean variables
+   USE trc             ! TOP variables
+   USE trdmod_oce
+   USE trdmod_trc
+   USE iom
+
+   USE trcopt_bling
+   USE vars_bling
+
+   IMPLICIT NONE
+   PRIVATE
+
+   PUBLIC   trc_sms_bling       ! called by trcsms.F90 module
+
+#  include "top_substitute.h90"
+
+   ! Defined HERE the arrays specific to BLINGv0 sms and ALLOCATE them in trc_sms_bling_alloc
+
+   !!----------------------------------------------------------------------
+   !! NEMO/TOP 3.3 , NEMO Consortium (2010)
+   !! $Id: trcsms_bling.F90 -1   $
+   !! Software governed by the CeCILL licence     (NEMOGCM/NEMO_CeCILL.txt)
+   !!----------------------------------------------------------------------
+CONTAINS
+
+   SUBROUTINE trc_sms_bling( kt )
+      !!----------------------------------------------------------------------
+      !!                     ***  trc_sms_bling  ***
+      !!
+      !! ** Purpose :   main routine of BLINGv0 model
+      !!
+      !! ** Method  : -
+      !!----------------------------------------------------------------------
+      !
+      INTEGER, INTENT(in) ::   kt   ! ocean time-step index
+
+      INTEGER  :: ji, jj, jk
+
+      REAL(wp) :: cpo4, cdop, cfer
+      ! Irradiance k
+      REAL(wp) :: expkT, po4_up, fe2p_up, def_fe, pc_m, thetamax_fe, alpha_chl, irrk
+      ! Production
+      REAL(wp) :: pc_tot, mu, biomass_p_ts, theta, chl_dia, mulamb0expkT
+      ! Phosphorous
+      REAL(wp) :: phi_sm, phi_lg, kappa_remin, phi_dop   ! paramters to put in the namelist!
+      REAL(wp) :: gamma_dop, gamma_pop
+      REAL(wp) :: wsink0_z, wsink0, wsink_acc, koxy, o2_2_p, remin_min !param
+      REAL(wp) :: jp_uptake, frac_pop,jdop,jp_recycle
+      REAL(wp) :: zzz, wsink, oxy_up, zremin, fpop, fpopkm1, jpremin
+
+      ! Trends
+      REAL(wp) :: fFed
+
+      REAL(wp), POINTER, DIMENSION(:,:,:) :: irr_mix, jPOP, fPO4, fDOP
+      REAL(wp), POINTER, DIMENSION(:,:,:) :: wrk1, wrk2, wrk3, wrk4
+      !!----------------------------------------------------------------------
+      !
+      IF( nn_timing == 1 )  CALL timing_start('trc_sms_bling')
+      !
+      IF(lwp) WRITE(numout,*)
+      IF(lwp) WRITE(numout,*) ' trc_sms_bling:  BLINGv0 model'
+      IF(lwp) WRITE(numout,*) ' ~~~~~~~~~~~~~~'
+
+      CALL wrk_alloc( jpi, jpj, jpk, irr_mix, jPOP, fPO4, fDOP )
+      CALL wrk_alloc( jpi, jpj, jpk, wrk1, wrk2, wrk3, wrk4 )
+
+      CALL trc_opt_bling (kt, irr_mix)  ! optical model (red and blue wavelengths)
+
+      wsink0_z=80.d0        ![m]
+      wsink0=16./86400.     ![m s-1]
+      wsink_acc=0.05/86400. ![s-1]
+      koxy=20.d-6 ! [mol O2 kg-1]
+      o2_2_p=150.d0 ![mol O2 (mol P)-1]
+      remin_min=0.3 ![dimensionless]
+      phi_dop=0.1 ![dimensionless]
+      phi_sm=0.18 ![dimensionless]
+      phi_lg=1    ![dimensionless]
+      kappa_remin=-0.032 ![(deg C)-1]
+      gamma_dop=1.d0/(4.d0*365.25*86400.d0) ![s-1]
+      gamma_pop=0.12d0/86400.d0
+
+               !write(*,*) kt, gam_biomass*rdt, MAXVAL(chl_bling)
+
+      DO jk=1, jpk
+         DO jj=1, jpj
+            DO ji=1, jpi
+
+               ! negative trophic variables DO not contribute to the fluxes
+               cpo4 = MAX( 0.e0, trn(ji,jj,jk,jpPO4_bling) )
+               cdop = MAX( 0.e0, trn(ji,jj,jk,jpDOP_bling) )
+               !cfer = MAX( 0.e0, trn(ji,jj,jk,jpFed_bling) )
+               cfer = MAX( 0.e0, trn(ji,jj,jk,jpfer) )
+
+               ! Temperature dependence
+               expkT=EXP(kappa_eppley*tsn(ji,jj,jk,jp_tem))
+ 
+               ! Iron uptake
+               fe2p_up = fe2p_max * cfer / (kfe + cfer)
+               def_fe  = def_fe_min + (1.d0-def_fe_min)*fe2p_up/(kfe2p_up+fe2p_up)*(kfe2p_up+fe2p_max)/fe2p_max 
+
+               ! Phosphate uptake
+               po4_up = cpo4 /( kpo4 + cpo4 )
+
+               ! Maximum production 
+               pc_m = pc_0 * expkT * MIN(po4_up,def_fe) 
+
+               ! Iron limitation on photosyntesis machinery
+               thetamax_fe=thetamax_lo + (thetamax_hi - thetamax_lo)*def_fe
+               alpha_chl  =alpha_min   + (alpha_max   - alpha_min  )*def_fe
+
+               ! I_k
+               irrk = pc_m / (epsln + alpha_chl*thetamax_fe) + irr_mem(ji,jj,jk)*0.5d0
+
+               ! Total production
+               pc_tot = pc_m*(1.d0-EXP(-irr_mix(ji,jj,jk)/(irrk+epsln)))
+
+               ! Net total production
+               mu = MAX (0.d0,pc_tot-resp_frac*pc_m)
+
+               ! Biomass
+               mulamb0expkT = mu/(lambda0*expkT)
+               biomass_p_ts = p_star*mulamb0expkT*(1.d0+(mulamb0expkT)**2)
+
+               ! 
+               IF (kt==nittrc000) biomass_p(ji,jj,jk)=biomass_p_ts
+
+               biomass_p(ji,jj,jk) =   biomass_p(ji,jj,jk) &
+                                    + (biomass_p_ts-biomass_p(ji,jj,jk))*MIN(1.d0,gam_biomass*rdt)*tmask(ji,jj,jk)
+
+               ! Chlorophyll concentration
+               theta   = thetamax_fe / (1.d0 + (thetamax_fe*alpha_chl*irr_mem(ji,jj,jk))/(2.d0*pc_m+epsln) )
+               chl_dia = biomass_p(ji,jj,jk) * c2p * 12.011e+6 * theta * tmask(ji,jj,jk) 
+               chl_bling(ji,jj,jk) = MAX(chl_min, chl_dia)
+
+               !--------------------------------------------------
+               ! PHOSPHORUS
+               !--------------------------------------------------
+
+               ! Phosphorous uptake flux
+               jp_uptake=biomass_p(ji,jj,jk)*mu
+
+               ! 
+               frac_pop=(phi_sm+phi_lg*(mulamb0expkT)**2) / (1+(mulamb0expkT)**2) * EXP(kappa_remin*tsn(ji,jj,jk,jp_tem))
+
+               !
+               jpop(ji,jj,jk)=frac_pop*jp_uptake
+
+               !
+               jdop=phi_dop*(jp_uptake-jpop(ji,jj,jk))
+
+               ! 
+               jp_recycle=jp_uptake-jpop(ji,jj,jk)-jdop
+
+               !
+               fPO4(ji,jj,jk)=   jp_recycle + gamma_dop*cdop - jp_uptake
+               fDOP(ji,jj,jk)= - gamma_dop*cdop + phi_dop*(jp_uptake-jpop(ji,jj,jk))
+
+               wrk1(ji,jj,jk)=mulamb0expkT 
+               wrk2(ji,jj,jk)=irrk
+               wrk3(ji,jj,jk)=irr_mix(ji,jj,jk)
+               wrk4(ji,jj,jk)=frac_pop
+            ENDDO
+         ENDDO
+      ENDDO
+
+               !write(*,*) kt, gam_biomass*rdt, MAXVAL(chl_bling)
+      !write(*,*) wsink_acc, wsink0, wsink0_z
+      DO ji=1, jpi
+         DO jj=1, jpj
+ 
+            zzz=fse3t(ji,jj,1)
+            IF (zzz .lt. wsink0_z) THEN
+               wsink=wsink0
+            ELSE
+               wsink=wsink0+wsink_acc*(zzz-wsink0_z)
+            ENDIF
+
+            cpo4 = MAX( 0.e0, trn(ji,jj,1,jpPO4_bling) )
+            oxy_up =(cpo4*o2_2_p)**2 / (koxy**2 + (cpo4*o2_2_p)**2)
+            zremin =(gamma_pop*oxy_up*(1.d0-remin_min)+remin_min)/(epsln+wsink)
+
+            fpop   = jpop(ji,jj,1)*fse3t(ji,jj,1)/(1.d0+fse3t(ji,jj,1)*zremin) 
+            jpremin=(jpop(ji,jj,1)*fse3t(ji,jj,1)-fpop)/(epsln+fse3t(ji,jj,1))
+
+            fPO4(ji,jj,1)=fPO4(ji,jj,1)+(1.d0-phi_dop)*jpremin
+            fDOP(ji,jj,1)=fDOP(ji,jj,1)+       phi_dop*jpremin
+
+       !if (ji==130 .AND. jj==110) write(*,*) 1, fse3t(ji,jj,1), zzz, wsink
+
+            DO jk=2, jpk
+
+
+               fpopkm1=fpop
+    
+               zzz=zzz+fse3t(ji,jj,jk)
+               IF (zzz .lt. wsink0_z) THEN
+                  wsink=wsink0
+               ELSE
+                  wsink=wsink0+wsink_acc*(zzz-wsink0_z)
+               ENDIF
+
+               cpo4 = MAX( 0.e0, trn(ji,jj,jk,jpPO4_bling) )
+               oxy_up =(cpo4*o2_2_p)**2 / (koxy**2 + (cpo4*o2_2_p)**2)
+               zremin =(gamma_pop*oxy_up*(1.d0-remin_min)+remin_min)/(epsln+wsink)
+
+               fpop   =(fpopkm1+jpop(ji,jj,jk)*fse3t(ji,jj,jk))/(1.d0+fse3t(ji,jj,jk)*zremin) 
+               jpremin=(fpopkm1+jpop(ji,jj,jk)*fse3t(ji,jj,jk)-fpop)/(epsln+fse3t(ji,jj,jk))
+               ! Add to the phosphorous trend
+
+               fPO4(ji,jj,jk)=fPO4(ji,jj,jk)+(1.d0-phi_dop)*jpremin
+               fDOP(ji,jj,jk)=fDOP(ji,jj,jk)+       phi_dop*jpremin
+
+        !       wrk1(ji,jj,jk)=wsink
+        !       wrk2(ji,jj,jk)=zremin
+        !       wrk3(ji,jj,jk)=jpremin
+             !  wrk1(ji,jj,jk)=(1.d0-phi_dop)*jpremin
+       !if (ji==130 .AND. jj==110) write(*,*) jk, fse3t(ji,jj,jk), zzz, wsink
+            ENDDO
+         ENDDO
+      ENDDO
+
+      dum1(:,:,:)=1.d0*tmask(:,:,:)-1.d0
+
+      IF( lk_iomput ) THEN
+            CALL iom_put( "wrk1", wrk1(:,:,:) * tmask(:,:,:) )  
+            CALL iom_put( "wrk2", wrk2(:,:,:) * tmask(:,:,:) )  
+            CALL iom_put( "wrk3", wrk3(:,:,:) * tmask(:,:,:) )  
+            CALL iom_put( "wrk4", wrk4(:,:,:) * tmask(:,:,:) )  
+      ENDIF
+
+      !fPO4=10./86400.d0*2.d0
+      fFed=0.d0
+
+      !write(*,*), 'BLING...', kt, MINVAL(fPO4), MAXVAL(fPO4), MINVAL(fDOP), MAXVAL(fDOP)
+
+      tra(:,:,:,jpPO4_bling) = tra(:,:,:,jpPO4_bling) + fPO4(:,:,:)*2.d0
+      tra(:,:,:,jpDOP_bling) = tra(:,:,:,jpDOP_bling) + fDOP(:,:,:)*2.d0
+      !tra(:,:,:,jpFed_bling) = tra(:,:,:,jpFed_bling) + fFed*2.d0
+
+      !IF(ln_ctl)   THEN  ! print mean trends (used for debugging)
+      !   WRITE(charout, FMT="('bio')")
+      !   CALL prt_ctl_trc_info(charout)
+      !   CALL prt_ctl_trc(tab4d=tra, mask=tmask, clinfo=ctrcnm)
+      !ENDIF
+
+      CALL wrk_dealloc( jpi, jpj, jpk, irr_mix, jPOP, fPO4, fDOP )
+      CALL wrk_dealloc( jpi, jpj, jpk, wrk1, wrk2, wrk3, wrk4 )
+      !
+      IF( nn_timing == 1 )  CALL timing_stop('trc_sms_bling')
+      !
+   END SUBROUTINE trc_sms_bling
+
+#else
+   !!----------------------------------------------------------------------
+   !!   Dummy module                                        No BLINGv0 model
+   !!----------------------------------------------------------------------
+CONTAINS
+   SUBROUTINE trc_sms_bling( kt )             ! Empty routine
+      INTEGER, INTENT( in ) ::   kt
+      WRITE(*,*) 'trc_sms_bling: You should not have seen this print! error?', kt
+   END SUBROUTINE trc_sms_bling
+#endif
+
+   !!======================================================================
+END MODULE trcsms_bling

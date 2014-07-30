@@ -1,0 +1,99 @@
+!!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+!! BLING namelists
+!!              1  - biological parameters for phytoplankton    (namblingphy)
+!!              2  - biological parameters for nutrients        (namblingnut)
+!!              3  - biological parameters for zooplankton      (namblingzoo)    
+!!              4  - biological parameters for detritus         (namblingdet)
+!!              5  - biological parameters for DOM              (namblingdom)
+!!              6  - parameters from aphotic layers to sediment (namblingsed)
+!!              7  - general coefficients                       (namblingrat)
+!!              8  - optical parameters                         (namblingopt)
+!!              9  - additional 2D/3D  diagnostics              (namblingdia)
+!!              10 - biological diagnostics trends              (namblingdbi) 
+!>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingbio     !   Biological parameters for phytoplankton
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingrat     !   Stochiometric ratio 
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+   c2p          = 106.d0  ! Carbon to phosphorous Redfield ratio   [mol C (mol P)-1]
+   oxy2p        = 150.d0  ! Oxygen to phosphorous                  [mol O2(mol P)-1]
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingprod   !   Production parameters
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+   pc_0         = 1.d-5        ! Maximum carbon-specific growth rate at 0C              [s-1]
+   kappa_eppley = 0.063        ! Temperature dependence of growth                       [(deg C)-1]
+   kpo4         = 1.d-7        ! PO4 uptake half-saturation constant                    [mol P L-1]
+   kfe          = 8.d-10       ! Dissolved Fe uptake half-saturation constant           [mol Fe m-3]
+   fe2p_max     = 2.968d-3     ! Maximum Fe:P uptake ratio                              [mol Fe (mol P)-1]
+   kfe2p_up     = 7.42d-4      ! Half-saturation cellular Fe:P                          [mol Fe (mol P)-1]
+   def_fe_min   = 0.d0         ! Minimum value for iron deficiency term                 [mol Fe (mol P)-1]
+   thetamax_lo  = 0.01         ! Maximum Chl:C ration, extreme iron limitation          [g Chl g C-1]
+   thetamax_hi  = 0.04         ! Maximum Chl:C ratio, abundant iron                     [g Chl g C-1]
+   alpha_min    = 1.84d-5      ! Quantum yield under low light, extreme iron limitation [g C (g chl)-1 m2 W-1 s-1]
+   alpha_max    = 7.36d-5      ! Quantum yield under low light, abundant iron           [g C (g chl)-1 m2 W-1 s-1]
+   resp_frac    = 0.d0         ! Fraction of gross production respirated                [dimensionless]
+   p_star       = 1.7436d-8    ! Pivotal phytoplankton biomass                          [mol P L-1] 
+   lambda0      = 0.19         ! Carbon-specific phytoplankton mortality rate           [d-1]
+   gam_biomass  = 0.5          ! Biomass adjustment time constant                       [d-1] 
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingopt     !   Optical parameters
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+!   xkr0     = 0.225     ! red absorption coefficent of water
+   xkr0     = 0.067      ! red absorption coefficent of water
+   xkb0     = 0.0232     ! blue absorption coefficient of water
+!   xkrp     = 0.037     ! red absorption coefficient of chl
+   xkrp     = 1.258e-4   ! red absorption coefficient of chl
+   xkbp     = 0.074      ! blue absorption coefficient of chl
+   xlr      = 0.629      ! red chl exposant for absorption
+   xlb      = 0.674      ! blue chl exposant for absorption
+   rpig     = 0.7        ! chla/chla+pheo ratio
+   rcchl    = 60.        ! Carbone/Chlorophyl ratio              [mgC.mgChla-1]
+   redf     = 6.56       ! redfield ratio (C:N) for phyto
+gam_irr_mem = 1          ! photoadaptation time constant         [d-1]
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingremin    !   Remineralization parameters
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+   wsink0_z    = 80.d0       ! depth at which sinking rate starts increasing  [m]
+   wsink0      = 16.         ! initial sinking rate                           [m d-1]   
+   wsink_acc   = 0.05        ! accerelation rate of sinking with depth        [d-1] 
+   koxy        = 20.d-6      ! half saturation const for aerobic respiration  [mol O2 kg-1] 
+   remin_min   = 0.3         ! minimum anaerobic respiration rate             [dimensionless] 
+   phi_dop     = 0.1         ! fraction of non-particulate uptake to DOM      [dimensionless]
+   phi_sm      = 0.18        ! detritus production by small phyto             [dimensionless]
+   phi_lg      = 1           ! detritus production by large phyto             [dimensionless]
+   kappa_remin = -0.032      ! T dependence of particulate production         [(deg C)-1]   
+   gamma_dop   = 0.25d0      ! decay timescale of DOM                         [y-1]
+   gamma_pop   = 0.12d0      ! remineralization rate of sinking POM           [d-1]
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingiron     !   Iron cycle parameters
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+   kfe_eq_lig_max = 8.e10   ! Equilibrium constant for iron binding with organic ligands [mol lig-1 kg]
+   kfe_eq_lig_min = 0.8e10  ! Minimum ligand strength under high light [mol lig-1 kg]
+   felig_bkg      = 1.0e-9  ! Global uniform iron ligand concentration [mol ligand L-1]
+   kfe_inorg      = 1.e3    ! 1.5-order iron scavenging in order to prevent high iron [mol.5 Fe-.5 kg s-1]
+   kfe_org        = 0.5     ! Adsorption rate coefficient for detrital organic material [g org-1 m3 s-1]
+   oxy_min        = 1.0e-06 ! Minimum oxygen concentration for oxic remineralization [mol O2 L-1]
+   ln_prev_o2lt0  = .true.  ! Prevent oxygen from becoming negative
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingdia     !   additional 2D/3D tracers diagnostics
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+!              !    name   ! title of   ! units !
+!              !           ! the field  !       !  
+   blingdia3d(1) = 'CHL_bling' , 'Chlorophyll BLINGv0',  'ug/kg'
+   blingdia3d(2) = 'dum1     ' , 'dummy var'          ,  'none'
+/
+!'''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+&namblingdbi     !   biological diagnostics trends     
+!,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,,
+!                !  2D bio diagnostics   units : mmole/m2/s   ("key_trdmld_trc")
+!                !  name    !       title of the field      !     units      !
+/
